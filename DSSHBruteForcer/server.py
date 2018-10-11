@@ -127,10 +127,27 @@ class Server():
         sess['start_pwd_idx'] = pwd_idx
 
     def IncPasswordsIdx(self, startIdx):
+        if startIdx >= self.currentPasswordsCount:
+            startIdx = 0
+            self.currentPasswordsIdx = 0
+            self.currentPasswordsFileIdx = self.currentPasswordsFileIdx + 1
+            # if all passwords files have been tried.
+            if self.currentPasswordsFileIdx == len(self.passwordsFiles):
+                self.currentTargetIpIdx = self.currentTargetIpIdx + 1
+
+            # if all targets have been tried, exit
+            if self.currentTargetIpIdx == len(self.targets):
+                sys.exit(1)  # todo do what when all targets have been tried
         endIdx = startIdx + self.passwordsNumPerClient
         if endIdx > self.currentPasswordsCount:
             endIdx = self.currentPasswordsCount
         return endIdx
+
+
+    # check all client status  every 60 minutes.
+    # todo
+    def CheckStatus(self):
+        pass
 
     # http server for serving data to clients
     # todo encrypt message between server and client
@@ -170,15 +187,17 @@ class Server():
         # when a client did not find a correct username&password pair within the given wordlist
         @app.route('/fail', methods=['POST'])
         def fail():
-            cid = request.form['id']
-            self.currentPasswordsIdx = self.IncPasswordsIdx(self.currentPasswordsIdx)
+            pass
+            # todo use client id to do something
+            # cid = request.form['id']
+            # self.currentPasswordsIdx = self.IncPasswordsIdx(self.currentPasswordsIdx)
 
-            if self.currentPasswordsIdx == self.currentPasswordsCount:
-                self.currentPasswordsFileIdx = self.currentPasswordsFileIdx + 1
+            # if current passwords file go to the end
+            # if self.currentPasswordsIdx == self.currentPasswordsCount:
+            # self.currentPasswordsFileIdx = self.currentPasswordsFileIdx + 1
 
         app.run(self.listenIp, port=self.listenPort)
 
 
 if __name__ == '__main__':
     Server().StartUp()
-    # cfg = common.GetJsonFileConfig('./config.json')
