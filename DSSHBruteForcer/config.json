@@ -1,0 +1,34 @@
+{
+  "clients": [
+    {
+      "id": 0,
+      "ip": "192.168.2.110",
+      "user": "root",
+      "password": ""
+    },
+    {
+      "id": 1,
+      "ip": "192.168.2.111",
+      "user": "root",
+      "password": ""
+    },
+    {
+      "id": 2,
+      "ip": "192.168.2.112",
+      "user": "root",
+      "password": ""
+    },
+    {
+      "id": 2,
+      "ip": "192.168.2.113",
+      "user": "root",
+      "password": ""
+    },
+    {
+      "id": 2,
+      "ip": "192.168.2.115",
+      "user": "root",
+      "password": ""
+    }
+  ]
+}

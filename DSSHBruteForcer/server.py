@@ -3,13 +3,15 @@ This Server control the clients
 '''
 import sys
 from optparse import OptionParser
-from flask import Flask, render_template, send_from_directory, request, jsonify
 import logging
-import time
-# from DSSHBruteForcer import utils
-import linecache
 import json
 import common
+
+from flask import (
+    Flask,
+    request,
+    redirect
+)
 
 
 class Server():
@@ -21,11 +23,11 @@ class Server():
         self.usernames = []
         self.passwords = []
         self.passwordsFiles = []
-        self.passwordsFileIdx = 0
         self.connections = []
         self.amountOfThreads = 0
         self.currentThreadCount = 0
         self.timeoutTime = 0
+        self.outputDir = 'output'
         self.outputFileName = ""
         self.singleMode = False
         self.verbose = False
@@ -34,10 +36,14 @@ class Server():
         self.sessions = []  # client sessions
         self.passwordCounts = 0  # passwords file total line counts
         self.passwordsNumPerClient = 1000  # passwords num serve to one client
-        self.currentPasswordsIdx = 0  # current passwords file index
-        self.targetIpIdx = 0  # current target ip index for brute force
-        self.usernameIdx = 0  # current username index for brute force
-        self.passwordsFileCount = 0
+        self.currentPasswordsIdx = 0
+        self.currentPasswordsFileIdx = 0  # current passwords file index
+        self.currentTargetIpIdx = 0  # current target ip index for brute force
+        self.currentUsernameIdx = 0  # current username index for brute force
+        self.currentPasswordsCount = 0
+        self.cfgPath = 'config.json'
+        self.cfg = {}
+        self.bruteAllUser = 0  # whether brute all usernames
 
     def StartUp(self):
         usage = '%s [-i targetIp] [-U usernamesFile] [-P passwordsFile]' % sys.argv[0]
@@ -60,10 +66,14 @@ class Server():
                                 help='Timeout Time', default=15)
         optionParser.add_option('-O', dest="outputFile",
                                 help='Output File Name')
-        optionParser.add_option('-v', '--verbose', action='store_true',
+        optionParser.add_option('-v', '--verbose',
                                 dest='verbose', help='verbose')
+        # optionParser.add_option('-A', '--verbose',
+        #                         dest='bruteAllUser', help='whether brute all usernames')
 
         (options, args) = optionParser.parse_args()
+
+        self.cfg = common.GetJsonFileConfig(self.cfgPath)
 
         # targets
         # todo:more expression
@@ -85,39 +95,90 @@ class Server():
         if options.passwordsFile:
             self.passwordsFiles.append(options.passwordsFile)
 
+        # if options.bruteAllUser:
+        #     self.bruteAllUser = 1
+
         # self.passwordCounts = common.FileTotalCounts(options.passwordsFile)
 
+        common.Mkdir(self.outputDir)
+
         self.StartServer(options)
+
+    def CurrentOutputPath(self):
+        return self.outputDir + '/' + self.targets[self.currentTargetIpIdx]
+
+    def LogSuccess(self, username, password):
+        with open(self.CurrentOutputPath(), 'a') as fp:
+            fp.write('%s:%s' % (username, password))
+
+    def GetCurrentUsername(self):
+        return self.currentUsernameIdx, self.usernames[self.currentUsernameIdx]
+
+    def GetCurrentTargetIp(self):
+        return self.currentTargetIpIdx, self.targets[self.currentTargetIpIdx]
+
+    def UpdateSession(self, cid, target_idx, user_idx, pwdf_idx, pwd_idx):
+        if cid not in self.sessions:
+            self.sessions[cid] = {}
+        sess = self.sessions[cid]
+        sess['target_ip'] = self.targets[target_idx]
+        sess['username'] = self.usernames[user_idx]
+        sess['pwd_file'] = self.passwordsFiles[pwdf_idx]
+        sess['start_pwd_idx'] = pwd_idx
+
+    def IncPasswordsIdx(self, startIdx):
+        endIdx = startIdx + self.passwordsNumPerClient
+        if endIdx > self.currentPasswordsCount:
+            endIdx = self.currentPasswordsCount
+        return endIdx
 
     # http server for serving data to clients
     # todo encrypt message between server and client
     def StartServer(self, options):
         app = Flask(__name__)
 
-        # serve targets for clients
-        @app.route('/targets')
-        def targets():
-            return json.dumps(self.targets[self.targetIpIdx])
-
-        # serve usernames for clients
-        @app.route('/usernames')
-        def usernames():
-            return json.dumps(self.usernames[self.usernameIdx])
-
         # serve passwords for clients
-        @app.route('/passwords')
-        def passwords():
-            path = self.passwordsFiles[self.currentPasswordsIdx]
+        @app.route('/task', methods=['POST'])
+        def task():
+            cid = request.form['id']
+            pwdfIdx = self.currentPasswordsFileIdx
+            path = self.passwordsFiles[pwdfIdx]
             startIdx = self.currentPasswordsIdx
-            endIdx = startIdx + self.passwordsNumPerClient
+            endIdx = self.IncPasswordsIdx(startIdx)
+            targetIdx, targetIp = self.GetCurrentTargetIp()
+            username_idx, username = self.GetCurrentUsername()
+            taskData = {
+                "target_ip": targetIp,
+                "username": username,
+                "passwords": common.GetFileRangeLines(path, startIdx, endIdx)
+            }
 
-            if endIdx > self.currentThreadCount:
-                endIdx = self.currentThreadCount
+            self.UpdateSession(cid, targetIp, username_idx, pwdfIdx, startIdx)
 
-            return json.dumps(common.GetFileRangeLines(path, startIdx, endIdx))
+            return json.dumps(taskData)
+
+        # when a client find a correct username&password pair
+        @app.route('/success', methods=['POST'])
+        def success():
+            username = request.form['username']
+            password = request.form['password']
+            self.LogSuccess(username, password)
+            if not self.bruteAllUser:
+                pass
+                # todo send message to all clients
+
+        # when a client did not find a correct username&password pair within the given wordlist
+        @app.route('/fail', methods=['POST'])
+        def fail():
+            cid = request.form['id']
+            self.currentPasswordsIdx = self.IncPasswordsIdx(self.currentPasswordsIdx)
+
+            if self.currentPasswordsIdx == self.currentPasswordsCount:
+                self.currentPasswordsFileIdx = self.currentPasswordsFileIdx + 1
 
         app.run(self.listenIp, port=self.listenPort)
 
 
 if __name__ == '__main__':
     Server().StartUp()
+    # cfg = common.GetJsonFileConfig('./config.json')

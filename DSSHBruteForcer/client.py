@@ -4,7 +4,8 @@ clients for do ssh brute force
 
 import requests
 import sys
-from Connection import Connection
+from connection import Connection
+
 
 class Client():
     def __init__(self):
@@ -23,8 +24,6 @@ class Client():
         self.verbose = False
 
 
-
-
 if __name__ == '__main__':
-    #todo
+    # todo
     pass
